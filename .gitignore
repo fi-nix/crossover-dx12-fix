@@ -4,6 +4,7 @@
 Game_Porting_Toolkit_*.dmg
 gptk4-b2/
 backup-stock-apple_gptk-CX*/
+backup-stock-apple_gptk-CX*.partial/
 
 # Contains Steam auth tickets and signatures.
 localconfig.vdf.bak

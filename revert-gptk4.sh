@@ -13,14 +13,15 @@
 #   ./revert-gptk4.sh              restore stock D3DMetal
 #   ./revert-gptk4.sh --dry-run    print the plan, change nothing
 #
+# BOTTLE_NAME=<name> targets a bottle other than "Satisfactory".
+#
 # Requires App Management permission for the calling terminal -- see README.md.
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CROSSOVER="/Applications/CrossOver.app"
-GPTK="$CROSSOVER/Contents/SharedSupport/CrossOver/lib64/apple_gptk"
-BOTTLE="$HOME/Library/Application Support/CrossOver/Bottles/Satisfactory"
+# shellcheck source=common.sh
+. "$HERE/common.sh"
 
 DRY=0
 case "${1:-}" in
@@ -29,83 +30,85 @@ case "${1:-}" in
     *) echo "usage: $(basename "$0") [--dry-run]" >&2; exit 2 ;;
 esac
 
-info() { printf '  %s\n' "$*"; }
-step() { printf '\n%s\n' "$*"; }
-die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
-
-d3dmetal_version_at() {
-    plutil -extract CFBundleShortVersionString raw \
-        "$1/external/D3DMetal.framework/Resources/Info.plist" 2>/dev/null || echo "none"
-}
-
-cx_running() { pgrep -f "$CROSSOVER/Contents/MacOS/CrossOver" >/dev/null 2>&1; }
-
 [ -d "$GPTK" ] || die "CrossOver apple_gptk not found: $GPTK"
 
-CXVER="$(defaults read "$CROSSOVER/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo unknown)"
-BACKUP="$HERE/backup-stock-apple_gptk-CX${CXVER}"
 CURRENT="$(d3dmetal_version_at "$GPTK")"
+info "CrossOver $CXVER, D3DMetal currently $CURRENT, bottle $BOTTLE_NAME"
 
-info "CrossOver $CXVER, D3DMetal currently $CURRENT"
-
-# Pick a restore source.
-if [ -d "$BACKUP/external" ] && [ -d "$BACKUP/wine" ]; then
+# A CrossOver update already put stock libraries back; only the bottle needs
+# cleaning up.
+if [ "$CURRENT" != "$WANT" ] && [ "$CURRENT" != "none" ] && ! has_old; then
+    SRC="none"; SRC_DESC="nothing - bundle is already stock"
+    STOCK_VER="$CURRENT"
+elif backup_ok; then
     SRC="$BACKUP"; SRC_DESC="backup: $(basename "$BACKUP")"
+    STOCK_VER="$(d3dmetal_version_at "$SRC")"
 elif [ -d "$GPTK/external.old" ] && [ -d "$GPTK/wine.old" ]; then
-    SRC="inplace";  SRC_DESC="in-place external.old / wine.old"
+    SRC="inplace"; SRC_DESC="in-place external.old / wine.old"
+    STOCK_VER="$(plist_version "$GPTK/external.old/D3DMetal.framework/Resources/Info.plist" unknown)"
 else
     die "no restore source found - reinstall CrossOver to get stock libraries back"
 fi
 info "restore source: $SRC_DESC"
-
-if [ "$SRC" = "inplace" ]; then
-    STOCK_VER="$(plutil -extract CFBundleShortVersionString raw \
-        "$GPTK/external.old/D3DMetal.framework/Resources/Info.plist" 2>/dev/null || echo unknown)"
-else
-    STOCK_VER="$(d3dmetal_version_at "$SRC")"
-fi
 info "would restore D3DMetal $STOCK_VER"
 
 if [ "$DRY" = "1" ]; then
     step "would do:"
     cx_running && info "quit CrossOver"
-    info "restore external/ and wine/ from $SRC_DESC"
-    info "remove nvngx.dll + nvapi64.dll from the Satisfactory bottle's system32"
+    [ "$SRC" = "none" ] || info "restore external/ and wine/ from $SRC_DESC"
+    info "restore or remove ${BOTTLE_DLLS[*]} in bottle $BOTTLE_NAME's system32"
     exit 0
 fi
 
-if cx_running; then
-    step "Quitting CrossOver"
-    osascript -e 'tell application "CrossOver" to quit' || true
-    for _ in $(seq 1 15); do cx_running || break; sleep 1; done
-    cx_running && die "CrossOver is still running - quit it and retry."
-    info "quit."
+quit_crossover
+
+# Put the bottle back first, while the GPTK copies are still around to compare
+# against. Only files that match a GPTK copy are deleted.
+GPTK_DLL_DIRS=("$GPTK/wine/x86_64-windows" "$PAYLOAD/wine/x86_64-windows")
+is_gptk_copy() {
+    local f="$1" d
+    for d in "${GPTK_DLL_DIRS[@]}"; do
+        cmp -s "$SYS32/$f" "$d/$f" && return 0
+        [ "$f" = nvngx.dll ] && cmp -s "$SYS32/$f" "$d/nvngx-on-metalfx.dll" && return 0
+    done
+    return 1
+}
+
+if [ -d "$SYS32" ]; then
+    step "Cleaning up bottle $BOTTLE_NAME"
+    for f in "${BOTTLE_DLLS[@]}"; do
+        if [ -e "$SYS32/$f$SAVED_SUFFIX" ]; then
+            mv -f "$SYS32/$f$SAVED_SUFFIX" "$SYS32/$f"
+            info "restored original $f"
+        elif [ -e "$SYS32/$f" ]; then
+            if is_gptk_copy "$f"; then
+                rm -f "$SYS32/$f"
+                info "removed $f"
+            else
+                warn "left $SYS32/$f alone - not a GPTK copy"
+            fi
+        fi
+    done
 fi
 
-step "Restoring stock D3DMetal $STOCK_VER"
-cd "$GPTK"
-if [ "$SRC" = "inplace" ]; then
-    rm -rf external wine
-    mv external.old external
-    mv wine.old     wine
-else
-    rm -rf external wine external.old wine.old
-    ditto "$SRC/" .
-fi
-info "restored."
-
-# Remove the files the swap added to the bottle. Stock CrossOver does not put
-# these in system32, so leaving GPTK4 copies behind would be inconsistent.
-for f in nvngx.dll nvapi64.dll; do
-    if [ -e "$BOTTLE/drive_c/windows/system32/$f" ]; then
-        rm -f "$BOTTLE/drive_c/windows/system32/$f"
-        info "removed $f from the bottle"
+if [ "$SRC" != "none" ]; then
+    step "Restoring stock D3DMetal $STOCK_VER"
+    cd "$GPTK"
+    if [ "$SRC" = "inplace" ]; then
+        rm -rf external wine
+        mv external.old external
+        mv wine.old     wine
+    else
+        rm -rf external wine external.old wine.old
+        ditto "$SRC/" .
     fi
-done
+    info "restored."
+fi
 
 step "Verifying"
 NOW="$(d3dmetal_version_at "$GPTK")"
 [ "$NOW" != "none" ] || die "no D3DMetal present after restore - reinstall CrossOver"
+[ "$NOW" != "$WANT" ] || die "D3DMetal still reports $WANT after restore"
 info "D3DMetal $NOW active."
 
 cat <<EOF

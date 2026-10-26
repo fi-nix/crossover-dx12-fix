@@ -4,8 +4,10 @@ Running **Satisfactory (UE 5.6)** under **CrossOver on Apple silicon** with the
 **DirectX 12** renderer, by replacing CrossOver's bundled D3DMetal 3.0 with
 **D3DMetal 4.0b2** from Apple's Game Porting Toolkit 4 beta 2.
 
-**Status: working.** Verified 2026-08-23 on an M5 Max — multiple clean sessions,
-D3D12 feature level 12_2, shader model 6.6, resource binding tier 3.
+**Status: working.** Verified 2026-08-23 on an M5 Max with CrossOver 26.3 — multiple
+clean sessions, D3D12 feature level 12_2, shader model 6.6, resource binding
+tier 3. Newer CrossOver or GPTK releases may change the picture; check the
+[changelog](https://www.codeweavers.com/crossover/changelog).
 
 > The swap is undone by every CrossOver update. When DX12 starts crashing again,
 > run `./reapply-gptk4.sh`. That is the whole maintenance story.
@@ -50,8 +52,8 @@ initializes.
 where the same assertion also hit
 [StarRupture](https://www.codeweavers.com/compatibility/crossover/forum/starrupture?msg=342791).
 
-No shipping CrossOver bundles D3DMetal 4 — 26.3 (2026-07-21, the current
-release) still ships 3.0 — so the swap has to be done by hand.
+As of CrossOver 26.3 (2026-07-21, current when this was written) no shipping
+CrossOver bundles D3DMetal 4, so the swap has to be done by hand.
 
 ---
 
@@ -62,7 +64,7 @@ release) still ships 3.0 — so the swap has to be done by hand.
 | Hardware | Apple silicon | M5 Max, 40-core GPU |
 | macOS | 15 Sequoia or newer | 26.6.2 (25G83) |
 | CrossOver | 26.x | 26.3.0.39832 |
-| Payload | GPTK 4.0 beta 2 | `gptk4-b2/lib/` (vendored here) |
+| Payload | GPTK 4.0 beta 2 | extracted to `gptk4-b2/lib/` — see below |
 | Bottle graphics engine | **D3DMetal** — not DXVK, not DXMT | `CX_GRAPHICS_BACKEND=d3dmetal` |
 | Permission | Terminal granted **App Management** | see below |
 
@@ -73,12 +75,37 @@ CrossOver.app is Developer ID signed, notarized, and stapled, and lives in
 write fails with `Operation not permitted`, and **`sudo` does not help**.
 
 Grant it in **System Settings → Privacy & Security → App Management** for
-whichever terminal runs the script (here: Ghostty). Add it with **+** if it
+whichever terminal runs the script (Terminal, iTerm, Ghostty, …). Add it with **+** if it
 isn't listed, and **relaunch the terminal** afterward — the permission is not
 picked up by an already-running process.
 
 This permission lets anything run from that terminal modify installed apps.
 Revoking it when you're done is reasonable; just re-grant before re-applying.
+
+### First-time setup: get the payload
+
+The GPTK binaries are Apple's and are **not in this repo** (`.gitignore`
+excludes them). Fetch them once:
+
+1. Download **Game Porting Toolkit 4.0 beta 2** from
+   <https://developer.apple.com/games/> (free Apple developer account).
+2. Mount the outer DMG, then the nested *Evaluation environment for Windows
+   games* DMG inside it.
+3. Copy the payload next to the scripts, with `ditto` so the
+   `x86_64-unix/*.so` symlinks into `libd3dshared.dylib` survive (plain `cp`
+   without `-R` breaks them):
+
+   ```sh
+   ditto "<mount>/redist/lib" gptk4-b2/lib
+   ```
+
+   Optionally copy the Read Me from the outer DMG to `gptk4-b2/Apple-ReadMe.rtf`
+   for reference.
+4. Check it: `./reapply-gptk4.sh --status` should show `payload 4.0b2`.
+
+Keep `gptk4-b2/` around afterward. Apple pulls beta builds when they're
+superseded, and with the payload on disk, re-applying after a CrossOver update
+is a one-liner.
 
 ---
 
@@ -89,8 +116,18 @@ Revoking it when you're done is reasonable; just re-grant before re-applying.
 ```
 
 Idempotent — exits immediately if D3DMetal 4.0b2 is already active. It quits
-CrossOver, backs up the stock libraries under the current CrossOver version,
-swaps in the payload, and updates the bottle.
+CrossOver (and refuses to continue while any Wine process is still running),
+backs up the stock libraries under the current CrossOver version, swaps in the
+payload, and updates the bottle. Any `nvngx.dll` / `nvapi64.dll` already in the
+bottle's `system32` is kept as `*.pre-gptk4` and put back by the revert.
+
+The bottle defaults to `Satisfactory`; for another one (e.g. StarRupture):
+
+```sh
+BOTTLE_NAME="StarRupture" ./reapply-gptk4.sh
+```
+
+If CrossOver isn't in `/Applications`, set `CROSSOVER=/path/to/CrossOver.app`.
 
 `./reapply-gptk4.sh --status` reports what's installed without changing
 anything. `--dry-run` prints the plan.
@@ -98,7 +135,7 @@ anything. `--dry-run` prints the plan.
 ### What it does
 
 The procedure is **Apple's own**, from the Read Me inside the GPTK 4 disk image
-(vendored here as `gptk4-b2/Apple-ReadMe.rtf`):
+(`gptk4-b2/Apple-ReadMe.rtf` if you copied it during setup):
 
 ```sh
 cd /Applications/CrossOver.app/Contents/SharedSupport/CrossOver/lib64/apple_gptk
@@ -126,7 +163,10 @@ DLLs — so the loader falls back cleanly for anything absent.
 -dx12 -NOTEXTURESTREAMING
 ```
 
-`-dx12` is redundant but explicit. `-NOTEXTURESTREAMING` is the one that matters.
+`-dx12` is redundant but explicit. `-NOTEXTURESTREAMING` turns off UE's texture
+streaming and loads textures up front. It isn't part of the DX12 fix, but it
+was in the working configuration. Expect higher memory use with it; drop it if
+you want to test without it.
 
 Set via Steam's UI (Properties → General), or directly in
 `.../Steam/userdata/<id>/config/localconfig.vdf` under the `"526870"` block —
@@ -234,13 +274,13 @@ D3DMetal environment variables, set per-bottle in `cxbottle.conf` under
 | Variable | Default | Notes |
 |---|---|---|
 | `D3DM_SUPPORT_DXR` | **on** for M3+ | DirectX Raytracing translation. **First thing to set to `0`** if DX12 misbehaves. |
-| `D3DM_ENABLE_METALFX` | off | Already `1` here. Maps DLSS→MetalFX where possible — see limitations. |
+| `D3DM_ENABLE_METALFX` | off | Maps DLSS→MetalFX where possible — see limitations. (Was `1` on the test bottle.) |
 | `D3DM_MTL4` | on, **macOS 27+ only** | Metal 4 backend. Irrelevant on macOS 26 — you get the Metal 3 backend no matter what the GPU advertises. |
 | `D3DM_MAX_FPS` | unset | Frame rate cap. |
 | `ROSETTA_ADVERTISE_AVX` | off | Advertise AVX to translated code. |
 
-This bottle also carries `WINEMSYNC=1`, `WINED3DMETAL=1`, and
-`DXMT_ENABLE_NVEXT=1` from bottle creation.
+For reference, the test bottle also carried `WINEMSYNC=1`, `WINED3DMETAL=1`,
+and `DXMT_ENABLE_NVEXT=1` from bottle creation.
 
 D3DMetal logs to the system log under category `D3DMetal`, prefix `D3DM` —
 visible in Console.app, or when launching from a terminal.
@@ -254,7 +294,10 @@ visible in Console.app, or when launching from a terminal.
 ```
 
 Restores stock D3DMetal from `backup-stock-apple_gptk-CX<version>/`, or from the
-in-place `external.old` / `wine.old` if that's all there is. DX12 will crash
+in-place `external.old` / `wine.old` if that's all there is. It also puts back
+any `*.pre-gptk4` DLLs in the bottle, and deletes only `system32` files that
+match a GPTK copy. If a CrossOver update already restored the stock libraries,
+it only cleans up the bottle. DX12 will crash
 again afterward — that's the point of the rollback, not a failure.
 
 Fully reinstalling CrossOver also reverts everything.
@@ -267,20 +310,24 @@ hatch, not a destination.
 
 ## Files here
 
+In the repo:
+
 | Path | Purpose |
 |---|---|
 | `reapply-gptk4.sh` | Apply the swap. Idempotent. `--status`, `--dry-run`. |
-| `revert-gptk4.sh` | Restore stock D3DMetal. |
-| `gptk4-b2/lib/` | GPTK 4.0b2 payload, symlinks intact — no re-download needed |
-| `gptk4-b2/Apple-ReadMe.rtf` | Apple's own instructions and env var reference |
-| `backup-stock-apple_gptk-CX26.3/` | Pristine D3DMetal 3.0 from CrossOver 26.3 |
-| `pre-fix-crash-logs/` | The original crashes, for reference |
-| `localconfig.vdf.bak` | Steam config before the launch-options edit |
-| `Game_Porting_Toolkit_4.0_beta_2.dmg` | Original download (payload already extracted) |
+| `revert-gptk4.sh` | Restore stock D3DMetal. `--dry-run`. |
+| `common.sh` | Paths, version (`WANT`) and helpers shared by both scripts. |
 
-The vendored payload is what makes re-applying a one-liner — Apple gates GPTK
-downloads behind a developer login, and beta builds get pulled when superseded.
-Don't delete `gptk4-b2/`.
+Created locally, never committed (see `.gitignore`):
+
+| Path | Purpose |
+|---|---|
+| `gptk4-b2/lib/` | GPTK 4.0b2 payload, symlinks intact — see "First-time setup" |
+| `gptk4-b2/Apple-ReadMe.rtf` | Apple's own instructions and env var reference |
+| `backup-stock-apple_gptk-CX<version>/` | Pristine stock D3DMetal, made by the first apply on each CrossOver version |
+
+Don't delete `gptk4-b2/` or the backups. The backup is written to `.partial`
+first and renamed only once complete, so an interrupted copy is never used.
 
 ---
 
@@ -293,7 +340,7 @@ When a newer GPTK arrives (4.0 final, or a later beta):
 2. `ditto "<mount>/redist/lib" gptk4-b2/lib` — `ditto` preserves the
    `x86_64-unix/*.so` symlinks that point at `libd3dshared.dylib`. Plain `cp`
    without `-R` does not.
-3. Update `WANT` in `reapply-gptk4.sh` to the new
+3. Update `WANT` in `common.sh` to the new
    `CFBundleShortVersionString`, then run it.
 
 Check a candidate's version without installing:
