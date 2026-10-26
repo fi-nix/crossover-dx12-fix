@@ -128,6 +128,8 @@ BOTTLE_NAME="StarRupture" ./reapply-gptk4.sh
 ```
 
 If CrossOver isn't in `/Applications`, set `CROSSOVER=/path/to/CrossOver.app`.
+If the bottle lives somewhere else (an external drive, say), set
+`BOTTLE=/path/to/the/bottle` — the folder that contains `drive_c`.
 
 `./reapply-gptk4.sh --status` reports what's installed without changing
 anything. `--dry-run` prints the plan.

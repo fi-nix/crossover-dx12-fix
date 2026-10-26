@@ -1,12 +1,14 @@
 # Shared by reapply-gptk4.sh and revert-gptk4.sh. Sourced, not executed.
 #
 # Environment overrides: BOTTLE_NAME=<name> for another bottle,
-# CROSSOVER=<path to CrossOver.app> if it is not in /Applications.
+# BOTTLE=<full path to the bottle> if it is not in the default location
+# (e.g. on an external drive), CROSSOVER=<path to CrossOver.app> if it is
+# not in /Applications.
 
 CROSSOVER="${CROSSOVER:-/Applications/CrossOver.app}"
 GPTK="$CROSSOVER/Contents/SharedSupport/CrossOver/lib64/apple_gptk"
 BOTTLE_NAME="${BOTTLE_NAME:-Satisfactory}"
-BOTTLE="$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE_NAME"
+BOTTLE="${BOTTLE:-$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE_NAME}"
 SYS32="$BOTTLE/drive_c/windows/system32"
 PAYLOAD="$HERE/gptk4-b2/lib"
 WANT="4.0b2"
