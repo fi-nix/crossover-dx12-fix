@@ -2,11 +2,14 @@
 
 Running **Satisfactory (UE 5.6)** under **CrossOver on Apple silicon** with the
 **DirectX 12** renderer, by replacing CrossOver's bundled D3DMetal 3.0 with
-**D3DMetal 4.0b2** from Apple's Game Porting Toolkit 4 beta 2.
+**D3DMetal 4** from Apple's Game Porting Toolkit 4 (beta 3 is the current
+default; beta 2 was the originally tested build).
 
-**Status: working.** Verified 2026-08-23 on an M5 Max with CrossOver 26.3 — multiple
-clean sessions, D3D12 feature level 12_2, shader model 6.6, resource binding
-tier 3. Newer CrossOver or GPTK releases may change the picture; check the
+**Status: working.** Verified 2026-08-23 on an M5 Max with CrossOver 26.3 and GPTK 4 beta 2 —
+multiple clean sessions, D3D12 feature level 12_2, shader model 6.6, resource binding
+tier 3. GPTK 4 beta 3 has since been reported to get the game in-game on
+DX12 on a Mac Studio (CrossOver 26.3 in `~/Applications`, bottle on an
+external drive). Newer CrossOver or GPTK releases may change the picture; check the
 [changelog](https://www.codeweavers.com/crossover/changelog).
 
 > The swap is undone by every CrossOver update. When DX12 starts crashing again,
@@ -64,7 +67,7 @@ CrossOver bundles D3DMetal 4, so the swap has to be done by hand.
 | Hardware | Apple silicon | M5 Max, 40-core GPU |
 | macOS | 15 Sequoia or newer | 26.6.2 (25G83) |
 | CrossOver | 26.x | 26.3.0.39832 |
-| Payload | GPTK 4.0 beta 2 | extracted to `gptk4-b2/lib/` — see below |
+| Payload | GPTK 4.0 beta 3 (or beta 2) | extracted to `gptk4-b2/lib/` — see below |
 | Bottle graphics engine | **D3DMetal** — not DXVK, not DXMT | `CX_GRAPHICS_BACKEND=d3dmetal` |
 | Permission | Terminal granted **App Management** | see below |
 
@@ -87,7 +90,7 @@ Revoking it when you're done is reasonable; just re-grant before re-applying.
 The GPTK binaries are Apple's and are **not in this repo** (`.gitignore`
 excludes them). Fetch them once:
 
-1. Download **Game Porting Toolkit 4.0 beta 2** from
+1. Download **Game Porting Toolkit 4** (beta 3 at the time of writing) from
    <https://developer.apple.com/games/> (free Apple developer account).
 2. Mount the outer DMG, then the nested *Evaluation environment for Windows
    games* DMG inside it.
@@ -101,7 +104,9 @@ excludes them). Fetch them once:
 
    Optionally copy the Read Me from the outer DMG to `gptk4-b2/Apple-ReadMe.rtf`
    for reference.
-4. Check it: `./reapply-gptk4.sh --status` should show `payload 4.0b2`.
+4. Check it: `./reapply-gptk4.sh --status` should show `payload 4.0b3`. If
+   it shows a different version, set `WANT` in `common.sh` to match. The
+   folder keeps the name `gptk4-b2` whichever beta is inside.
 
 Keep `gptk4-b2/` around afterward. Apple pulls beta builds when they're
 superseded, and with the payload on disk, re-applying after a CrossOver update
@@ -115,7 +120,7 @@ is a one-liner.
 ./reapply-gptk4.sh
 ```
 
-Idempotent — exits immediately if D3DMetal 4.0b2 is already active. It quits
+Idempotent — exits immediately if the wanted D3DMetal (`WANT`) is already active. It quits
 CrossOver (and refuses to continue while any Wine process is still running),
 backs up the stock libraries under the current CrossOver version, swaps in the
 payload, and updates the bottle. Any `nvngx.dll` / `nvapi64.dll` already in the
@@ -258,7 +263,7 @@ upscaler choice here:
 80004001` (`E_NOTIMPL`) appears at startup and is harmless — it's UE's crash
 breadcrumb feature, unimplemented in D3DMetal.
 
-**This is beta software.** GPTK 4.0 **beta 2**, which CodeWeavers never tested
+**This is beta software.** GPTK 4.0 **betas**, which CodeWeavers never tested
 against. Unrelated regressions elsewhere in the bottle are possible. Modifying
 the bundle also breaks its code signature seal — already-launched apps aren't
 re-verified and CrossOver launches fine, but it is a real modification to a
@@ -324,7 +329,7 @@ Created locally, never committed (see `.gitignore`):
 
 | Path | Purpose |
 |---|---|
-| `gptk4-b2/lib/` | GPTK 4.0b2 payload, symlinks intact — see "First-time setup" |
+| `gptk4-b2/lib/` | GPTK 4 payload, symlinks intact — see "First-time setup" |
 | `gptk4-b2/Apple-ReadMe.rtf` | Apple's own instructions and env var reference |
 | `backup-stock-apple_gptk-CX<version>/` | Pristine stock D3DMetal, made by the first apply on each CrossOver version |
 

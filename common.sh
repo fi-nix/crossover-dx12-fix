@@ -11,7 +11,7 @@ BOTTLE_NAME="${BOTTLE_NAME:-Satisfactory}"
 BOTTLE="${BOTTLE:-$HOME/Library/Application Support/CrossOver/Bottles/$BOTTLE_NAME}"
 SYS32="$BOTTLE/drive_c/windows/system32"
 PAYLOAD="$HERE/gptk4-b2/lib"
-WANT="4.0b2"
+WANT="4.0b3"
 
 # DLLs the swap copies into the bottle's system32. Anything already there is
 # moved aside to <name>$SAVED_SUFFIX first and put back by the revert.

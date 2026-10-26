@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Apply Apple's Game Porting Toolkit 4 (D3DMetal 4.0b2) to CrossOver.
+# Apply Apple's Game Porting Toolkit 4 (D3DMetal 4, version in common.sh) to CrossOver.
 #
 # CrossOver 26.3 ships D3DMetal 3.0, under which UE 5.6 titles (Satisfactory,
 # StarRupture) die during renderer init with:
